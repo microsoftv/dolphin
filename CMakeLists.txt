@@ -255,10 +255,11 @@ else()
   check_and_add_flag(INIT_SELF -Winit-self)
   check_and_add_flag(MISSING_DECLARATIONS -Wmissing-declarations)
   check_and_add_flag(MISSING_VARIABLE_DECLARATIONS -Wmissing-variable-declarations)
-
+  
   # gcc uses some optimizations which might break stuff without this flag
   check_and_add_flag(NO_STRICT_ALIASING -fno-strict-aliasing)
-  check_and_add_flag(NO_EXCEPTIONS -fno-exceptions)
+  # in order to build with zmq, we get rid of this
+  #check_and_add_flag(NO_EXCEPTIONS -fno-exceptions)
 
   check_and_add_flag(VISIBILITY_INLINES_HIDDEN -fvisibility-inlines-hidden)
   check_and_add_flag(VISIBILITY_HIDDEN -fvisibility=hidden)
@@ -477,6 +478,13 @@ if(OPROFILING)
   else()
     message(FATAL_ERROR "OProfile not found. Can't build profiling support.")
   endif()
+endif()
+
+find_package(ZMQ)
+if(ZMQ_FOUND)
+  message(STATUS "Using ZMQ")
+else()
+  message(STATUS "Failed to find ZMQ")
 endif()
 
 if(ENABLE_EVDEV)

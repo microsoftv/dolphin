@@ -12,23 +12,17 @@
 #include "Core/HW/SystemTimers.h"
 #include "Core/MemoryWatcher.h"
 
-MemoryWatcher::MemoryWatcher()
+MemoryWatcher::MemoryWatcher() : m_context(1)
 {
   m_running = false;
   if (!LoadAddresses(File::GetUserPath(F_MEMORYWATCHERLOCATIONS_IDX)))
+  {
+    std::cout << "Failed to load MemoryWatcher addresses. Not watching memory." << std::endl;
     return;
+  }
   if (!OpenSocket(File::GetUserPath(F_MEMORYWATCHERSOCKET_IDX)))
     return;
   m_running = true;
-}
-
-MemoryWatcher::~MemoryWatcher()
-{
-  if (!m_running)
-    return;
-
-  m_running = false;
-  close(m_fd);
 }
 
 bool MemoryWatcher::LoadAddresses(const std::string& path)
@@ -36,7 +30,10 @@ bool MemoryWatcher::LoadAddresses(const std::string& path)
   std::ifstream locations;
   File::OpenFStream(locations, path, std::ios_base::in);
   if (!locations)
+  {
+    std::cout << "No MemoryWatcher Locations." << std::endl;
     return false;
+  }
 
   std::string line;
   while (std::getline(locations, line))
@@ -59,11 +56,26 @@ void MemoryWatcher::ParseLine(const std::string& line)
 
 bool MemoryWatcher::OpenSocket(const std::string& path)
 {
-  m_addr.sun_family = AF_UNIX;
-  strncpy(m_addr.sun_path, path.c_str(), sizeof(m_addr.sun_path) - 1);
+  std::cout << "Connecting zmq socket to " << path << std::endl;
 
-  m_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
-  return m_fd >= 0;
+  if (!File::Exists(path))
+  {
+    std::cout << "Socket does not exist!" << std::endl;
+    return false;
+  }
+
+  m_socket = std::make_unique<zmq::socket_t> (m_context, ZMQ_REQ);
+  try
+  {
+    m_socket->connect(("ipc://" + path).c_str());
+  }
+  catch (zmq::error_t& e)
+  {
+    std::cout << "Error connecting socket: " << e.what() << std::endl;
+    return false;
+  }
+  std::cout << "Connected zmq socket to " << path << std::endl;
+  return true;
 }
 
 u32 MemoryWatcher::ChasePointer(const std::string& line)
@@ -102,6 +114,12 @@ void MemoryWatcher::Step()
     return;
 
   std::string message = ComposeMessages();
-  sendto(m_fd, message.c_str(), message.size() + 1, 0, reinterpret_cast<sockaddr*>(&m_addr),
-         sizeof(m_addr));
+
+  zmq::message_t zmq_msg (message.size());
+  memcpy (zmq_msg.data (), message.c_str(), message.size());
+  m_socket->send (zmq_msg);
+
+   //TODO: do something with this request
+  zmq::message_t request;
+  m_socket->recv (&request);
 }

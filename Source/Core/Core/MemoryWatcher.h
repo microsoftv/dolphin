@@ -8,6 +8,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <vector>
+#include <zmq.hpp>
 
 // MemoryWatcher reads a file containing in-game memory addresses and outputs
 // changes to those memory addresses to a unix domain socket as the game runs.
@@ -21,7 +22,6 @@ class MemoryWatcher final
 {
 public:
   MemoryWatcher();
-  ~MemoryWatcher();
   void Step();
 
 private:
@@ -34,8 +34,8 @@ private:
 
   bool m_running = false;
 
-  int m_fd;
-  sockaddr_un m_addr{};
+  zmq::context_t m_context;
+  std::unique_ptr<zmq::socket_t> m_socket;
 
   // Address as stored in the file -> list of offsets to follow
   std::map<std::string, std::vector<u32>> m_addresses;

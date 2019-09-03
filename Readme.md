@@ -36,6 +36,18 @@ Please read the [FAQ](https://dolphin-emu.org/docs/faq/) before using Dolphin.
 
 Dolphin can only be installed on devices that satisfy the above requirements. Attempting to install on an unsupported device will fail and display an error message.
 
+## Ubuntu 16.04 Dependencies
+
+`sudo apt-get-install build-essential cmake libevdev-dev libudev-dev libgl1-mesa-dev libusb-1.0.0-dev libao-dev libpulse-dev libxrandr-dev libopenal-dev libasound2-dev libzmq-dev libgtk2.0-dev libpng12-dev`
+
+## Building for Ubuntu 16.04
+1. `mkdir Build`
+2. `cd Build`
+3. `cmake ..`
+4. `make`
+
+It is recommended that Ubuntu 16.04 users perform a global installation via `sudo make install` after the above steps.
+
 ## Building for Windows
 
 Use the solution file `Source/dolphin-emu.sln` to build Dolphin on Windows.
