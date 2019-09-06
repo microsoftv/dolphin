@@ -665,3 +665,7 @@ if(UNIX)
     MemoryWatcher.h
   )
 endif()
+
+if(ZMQ_FOUND)
+  target_link_libraries(core PRIVATE ${ZMQ_LIBRARIES})
+endif()

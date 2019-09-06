@@ -33,6 +33,7 @@ option(ENABLE_PULSEAUDIO "Enables PulseAudio sound backend" ON)
 option(ENABLE_LLVM "Enables LLVM support, for disassembly" ON)
 option(ENABLE_TESTS "Enables building the unit tests" ON)
 option(USE_DISCORD_PRESENCE "Enables Discord Rich Presence, show the current game on Discord" ON)
+option(ENABLE_ZMQ "Use ZMQ for MemoryWatcher" ON)
 
 # Maintainers: if you consider blanket disabling this for your users, please
 # consider the following points:
@@ -258,8 +259,7 @@ else()
   
   # gcc uses some optimizations which might break stuff without this flag
   check_and_add_flag(NO_STRICT_ALIASING -fno-strict-aliasing)
-  # in order to build with zmq, we get rid of this
-  #check_and_add_flag(NO_EXCEPTIONS -fno-exceptions)
+  check_and_add_flag(NO_EXCEPTIONS -fno-exceptions)
 
   check_and_add_flag(VISIBILITY_INLINES_HIDDEN -fvisibility-inlines-hidden)
   check_and_add_flag(VISIBILITY_HIDDEN -fvisibility=hidden)
@@ -480,13 +480,6 @@ if(OPROFILING)
   endif()
 endif()
 
-find_package(ZMQ)
-if(ZMQ_FOUND)
-  message(STATUS "Using ZMQ")
-else()
-  message(STATUS "Failed to find ZMQ")
-endif()
-
 if(ENABLE_EVDEV)
   find_package(Libudev REQUIRED)
   find_package(Libevdev REQUIRED)
@@ -496,6 +489,16 @@ if(ENABLE_EVDEV)
     add_definitions(-DHAVE_LIBEVDEV=1)
   else()
     message(FATAL_ERROR "Couldn't find libevdev and/or libudev. Can't build evdev controller backend.\nDisable ENABLE_EVDEV if you wish to build without controller support")
+  endif()
+endif()
+
+if(ENABLE_ZMQ)
+  find_package(ZMQ REQUIRED)
+  if(ZMQ_FOUND)
+    message(STATUS "libzmq found, using for memory watcher")
+    add_definitions(-DUSE_ZMQ=1)
+	else()
+		message(FATAL_ERROR "Couldn't find libzmq. \nDisable ENABLE_ZMQ if you wish to build without zmq support")
   endif()
 endif()
 

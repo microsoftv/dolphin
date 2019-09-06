@@ -12,7 +12,7 @@
 #include "Core/HW/SystemTimers.h"
 #include "Core/MemoryWatcher.h"
 
-MemoryWatcher::MemoryWatcher() : m_context(1)
+MemoryWatcher::MemoryWatcher()
 {
   m_running = false;
   if (!LoadAddresses(File::GetUserPath(F_MEMORYWATCHERLOCATIONS_IDX)))
@@ -23,6 +23,21 @@ MemoryWatcher::MemoryWatcher() : m_context(1)
   if (!OpenSocket(File::GetUserPath(F_MEMORYWATCHERSOCKET_IDX)))
     return;
   m_running = true;
+}
+
+MemoryWatcher::~MemoryWatcher()
+{
+  if (!m_running)
+    return;
+
+  m_running = false;
+
+#ifndef USE_ZMQ
+  close(m_fd);
+#else
+  zmq_close(m_socket);
+  zmq_ctx_destroy(m_context);
+#endif
 }
 
 bool MemoryWatcher::LoadAddresses(const std::string& path)
@@ -54,28 +69,51 @@ void MemoryWatcher::ParseLine(const std::string& line)
     m_addresses[line].push_back(offset);
 }
 
+#ifdef USE_ZMQ
+static const char* ZMQErrorString()
+{
+  return zmq_strerror(zmq_errno());
+}
+#endif
+
 bool MemoryWatcher::OpenSocket(const std::string& path)
 {
-  std::cout << "Connecting zmq socket to " << path << std::endl;
+#ifndef USE_ZMQ
+  m_addr.sun_family = AF_UNIX;
+  strncpy(m_addr.sun_path, path.c_str(), sizeof(m_addr.sun_path) - 1);
 
+  m_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
+  return m_fd >= 0;
+#else
+  std::cout << "Connecting zmq socket to " << path << std::endl;
+  
   if (!File::Exists(path))
   {
     std::cout << "Socket does not exist!" << std::endl;
     return false;
   }
-
-  m_socket = std::make_unique<zmq::socket_t> (m_context, ZMQ_REQ);
-  try
+  
+  if (!(m_context = zmq_ctx_new()))
   {
-    m_socket->connect(("ipc://" + path).c_str());
-  }
-  catch (zmq::error_t& e)
-  {
-    std::cout << "Error connecting socket: " << e.what() << std::endl;
+    std::cout << "Failed to allocate zmq context: " << ZMQErrorString() << std::endl;
     return false;
   }
+
+  if(!(m_socket = zmq_socket(m_context, ZMQ_REQ)))
+  {
+    std::cout << "Failed to create zmq socket: " << ZMQErrorString() << std::endl;
+    return false;
+  }
+  
+  if(zmq_connect(m_socket, ("ipc://" + path).c_str()) < 0)
+  {
+    std::cout << "Error connecting socket: " << ZMQErrorString() << std::endl;
+    return false;
+  }
+  
   std::cout << "Connected zmq socket to " << path << std::endl;
   return true;
+#endif
 }
 
 u32 MemoryWatcher::ChasePointer(const std::string& line)
@@ -89,6 +127,8 @@ u32 MemoryWatcher::ChasePointer(const std::string& line)
 std::string MemoryWatcher::ComposeMessages()
 {
   std::stringstream message_stream;
+  // prevent silly things like commas being added!
+  message_stream.imbue(std::locale::classic());
   message_stream << std::hex;
 
   for (auto& entry : m_values)
@@ -114,12 +154,15 @@ void MemoryWatcher::Step()
     return;
 
   std::string message = ComposeMessages();
+#ifndef USE_ZMQ
+  sendto(m_fd, message.c_str(), message.size() + 1, 0,
+         reinterpret_cast<sockaddr*>(&m_addr), sizeof(m_addr));
+#else
+  zmq_send(m_socket, message.c_str(), message.size(), 0);
 
-  zmq::message_t zmq_msg (message.size());
-  memcpy (zmq_msg.data (), message.c_str(), message.size());
-  m_socket->send (zmq_msg);
-
-   //TODO: do something with this request
-  zmq::message_t request;
-  m_socket->recv (&request);
+  // do something with the reply?
+  char buffer[10];
+  zmq_recv(m_socket, buffer, 10, 0);
+#endif
 }
+
